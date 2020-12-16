@@ -752,7 +752,7 @@ function run_k8s_kubelet {
         --cni-bin-dir=$CNI_BIN_DIR \
         --cni-conf-dir=$CNI_CONF_DIR \
         --cert-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet.cert \
-        --feature-gates="ExecProbeTimeout=false"
+        --feature-gates="ExecProbeTimeout=false" \
         --root-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet"
 
     if [[ ${CONTAINER_ENGINE} == 'docker' ]]; then
