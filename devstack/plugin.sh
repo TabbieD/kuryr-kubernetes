@@ -641,6 +641,7 @@ function run_k8s_api {
                 --service-account-issuer=https://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
                 --service-account-signing-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
+                --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/kuryr.key \
                 --insecure-bind-address=0.0.0.0 \
                 --insecure-port=0 \
                 --etcd-servers=http://${SERVICE_HOST}:${ETCD_PORT} \
