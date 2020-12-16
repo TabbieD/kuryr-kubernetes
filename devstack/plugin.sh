@@ -548,12 +548,12 @@ function wait_for {
     local flags
     name="$1"
     url="$2"
-    cacert_path=${3:-${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt}
+    cacert_path=${3:-}
     timeout=${4:-$KURYR_WAIT_TIMEOUT}
 
     echo -n "Waiting for $name to respond"
 
-    extra_flags=${cacert_path:+"--cacert $cacert_path"}
+    extra_flags=${cacert_path:+"--cacert ${cacert_path}"}
 
     local start_time=$(date +%s)
     until curl -o /dev/null -s $extra_flags "$url"; do
@@ -751,6 +751,7 @@ function run_k8s_kubelet {
         --cni-bin-dir=$CNI_BIN_DIR \
         --cni-conf-dir=$CNI_CONF_DIR \
         --cert-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet.cert \
+        --feature-gates="ExecProbeTimeout=false"
         --root-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet"
 
     if [[ ${CONTAINER_ENGINE} == 'docker' ]]; then
