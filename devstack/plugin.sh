@@ -553,7 +553,7 @@ function wait_for {
 
     echo -n "Waiting for $name to respond"
 
-    extra_flags=${cacert_path:+"--cacert ${cacert_path}"}
+    extra_flags=${cacert_path:+"--cacert ${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt"}
 
     local start_time=$(date +%s)
     until curl -o /dev/null -s $extra_flags "$url"; do
@@ -638,15 +638,18 @@ function run_k8s_api {
 
     command="${KURYR_KUBE_APISERVER_BINARY} \
                 --service-cluster-ip-range=${cluster_ip_range} \
+                --service-account-issuer=https://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
+                --service-account-signing-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
+                --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --insecure-bind-address=0.0.0.0 \
-                --insecure-port=${KURYR_K8S_API_PORT} \
+                --insecure-port=0 \
                 --etcd-servers=http://${SERVICE_HOST}:${ETCD_PORT} \
                 --client-ca-file=${KURYR_KUBERNETES_DATA_DIR}/ca.crt \
-                --basic-auth-file=${KURYR_KUBERNETES_DATA_DIR}/basic_auth.csv \
                 --min-request-timeout=300 \
                 --tls-cert-file=${KURYR_KUBERNETES_DATA_DIR}/server.cert \
                 --tls-private-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --token-auth-file=${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv \
+                --feature-gates="RemoveSelfLink=false" \
                 --allow-privileged=true \
                 --v=$(get_k8s_log_level) \
                 --logtostderr=true"
