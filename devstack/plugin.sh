@@ -638,7 +638,7 @@ function run_k8s_api {
 
     command="${KURYR_KUBE_APISERVER_BINARY} \
                 --service-cluster-ip-range=${cluster_ip_range} \
-                --service-account-issuer=https://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
+                --service-account-issuer=http://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
                 --service-account-signing-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/kuryr.key \
@@ -741,18 +741,32 @@ function run_k8s_kubelet {
     # adding Python and all our CNI/binding dependencies.
     local command
     local minor_version
+    local path_
+
+    path_="/home/vagrant/"
+
+    cat >> "${path_}/config.yml" << EOF
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+address:
+    "0.0.0.0"
+enableServer:
+    true
+cgroupDriver:
+    "cgroupfs"
+failSwapOn:
+    false
+EOF
 
     sudo mkdir -p "${KURYR_KUBERNETES_DATA_DIR}/"{kubelet,kubelet.cert}
     command="$KURYR_KUBELET_BINARY \
         --kubeconfig=${HOME}/.kube/config \
         --v=2 \
-        --address=0.0.0.0 \
-        --enable-server \
+        --config=${path_}/config.yaml \
         --network-plugin=cni \
         --cni-bin-dir=$CNI_BIN_DIR \
         --cni-conf-dir=$CNI_CONF_DIR \
         --cert-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet.cert \
-        --feature-gates="ExecProbeTimeout=false" \
         --root-dir=${KURYR_KUBERNETES_DATA_DIR}/kubelet"
 
     if [[ ${CONTAINER_ENGINE} == 'docker' ]]; then
