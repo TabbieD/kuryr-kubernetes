@@ -545,18 +545,22 @@ function wait_for {
     local name
     local url
     local cacert_path
-    local flags
+    local key_path
+    local cert_path
+    local extra_flags
     name="$1"
     url="$2"
     cacert_path=${3:-}
-    timeout=${4:-$KURYR_WAIT_TIMEOUT}
+    key_path=${4:-}
+    cert_path=${5:-}        
+    timeout=${6:-$KURYR_WAIT_TIMEOUT}
 
     echo -n "Waiting for $name to respond"
 
-    extra_flags=${cacert_path:+"--cacert ${cacert_path}"}
+    extra_flags=('-s' ${cacert_path:+--cacert "$cacert_path"} ${key_path:+--key "$key_path"} ${cert_path:+--cert "$cert_path"})
 
     local start_time=$(date +%s)
-    until curl -o /dev/null -s $extra_flags "$url"; do
+    until curl -o /dev/null "${extra_flags[@]}" "$url"; do
         echo -n "."
         local curr_time=$(date +%s)
         local time_diff=$(($curr_time - $start_time))
@@ -577,9 +581,9 @@ function wait_for_ok_health {
     local time_diff
     name="$1"
     url="$2"
-    cacert_path=${3:-}
-    key_path=${4:-}
-    cert_path=${5:-}
+    cacert_path=${3:-${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt}
+    key_path=${4:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.key}
+    cert_path=${5:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.crt}
     timeout=${6:-$KURYR_WAIT_TIMEOUT}
 
 
@@ -638,7 +642,7 @@ function run_k8s_api {
 
     command="${KURYR_KUBE_APISERVER_BINARY} \
                 --service-cluster-ip-range=${cluster_ip_range} \
-                --service-account-issuer=http://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
+                --service-account-issuer=https://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
                 --service-account-signing-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/kuryr.key \
