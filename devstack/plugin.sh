@@ -550,9 +550,9 @@ function wait_for {
     local extra_flags
     name="$1"
     url="$2"
-    cacert_path=${3:-}
-    key_path=${4:-}
-    cert_path=${5:-}        
+    cacert_path=${3:-${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt}
+    key_path=${4:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.key}
+    cert_path=${5:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.crt}        
     timeout=${6:-$KURYR_WAIT_TIMEOUT}
 
     echo -n "Waiting for $name to respond"
@@ -581,9 +581,9 @@ function wait_for_ok_health {
     local time_diff
     name="$1"
     url="$2"
-    cacert_path=${3:-${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt}
-    key_path=${4:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.key}
-    cert_path=${5:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.crt}
+    cacert_path=${3:-}
+    key_path=${4:-}
+    cert_path=${5:-}
     timeout=${6:-$KURYR_WAIT_TIMEOUT}
 
 
