@@ -650,7 +650,7 @@ function run_k8s_api {
                 --insecure-port=0 \
                 --etcd-servers=http://${SERVICE_HOST}:${ETCD_PORT} \
                 --client-ca-file=${KURYR_KUBERNETES_DATA_DIR}/ca.crt \
-                --min-request-timeout=300 \
+                --min-request-timeout=600 \
                 --tls-cert-file=${KURYR_KUBERNETES_DATA_DIR}/server.cert \
                 --tls-private-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --token-auth-file=${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv \
