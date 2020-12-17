@@ -747,7 +747,7 @@ function run_k8s_kubelet {
     local minor_version
     local path_
 
-    path_="/home/vagrant/"
+    path_="/home/vagrant"
 
     cat >> "${path_}/config.yml" << EOF
 apiVersion: kubelet.config.k8s.io/v1beta1
