@@ -526,8 +526,10 @@ function prepare_kubernetes_files {
     sudo bash -c "echo 'admin,admin,admin' > $KURYR_KUBERNETES_DATA_DIR/basic_auth.csv"
 
     # Create known tokens for service accounts
-    sudo bash -c "echo '$(create_token),admin,admin' >> ${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv"
-    sudo bash -c "echo '$(create_token),kubelet,kubelet' >> ${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv"
+    KURYR_ADMIN_TOKEN=$(create_token)
+    KUBELET_TOKEN=$(create_token)
+    sudo bash -c "echo '$KURYR_ADMIN_TOKEN,admin,admin' >> ${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv"
+    sudo bash -c "echo '$KUBELET_TOKEN,kubelet,kubelet' >> ${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv"
     sudo bash -c "echo '$(create_token),kube_proxy,kube_proxy' >> ${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv"
 
     # Copy certs for Kuryr services to use
@@ -544,23 +546,21 @@ function prepare_kubernetes_files {
 function wait_for {
     local name
     local url
+    local TOKEN
     local cacert_path
-    local key_path
-    local cert_path
-    local extra_flags
+    local flags
     name="$1"
     url="$2"
-    cacert_path=${3:-${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt}
-    key_path=${4:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.key}
-    cert_path=${5:-${KURYR_KUBERNETES_DATA_DIR}/kuryr.crt}        
-    timeout=${6:-$KURYR_WAIT_TIMEOUT}
+    TOKEN=${3:-}
+    cacert_path=${4:-}
+    timeout=${5:-$KURYR_WAIT_TIMEOUT}
 
     echo -n "Waiting for $name to respond"
 
-    extra_flags=('-s' ${cacert_path:+--cacert "$cacert_path"} ${key_path:+--key "$key_path"} ${cert_path:+--cert "$cert_path"})
+    extra_flags=(${TOKEN:+--header Authorization: Bearer "$TOKEN"} ${cacert_path:+--cacert "${cacert_path}"})
 
     local start_time=$(date +%s)
-    until curl -o /dev/null "${extra_flags[@]}" "$url"; do
+    until curl -o /dev/null -s "${extra_flags[@]}" "$url"; do
         echo -n "."
         local curr_time=$(date +%s)
         local time_diff=$(($curr_time - $start_time))
@@ -640,21 +640,27 @@ function run_k8s_api {
         cluster_ip_range="$service_cidr"
     fi
 
+    # FIXME(tabbie_fash) --service-account-signing-key-file and
+    # --service-account-issuer are required flags.
+    # '--insecure-' flags have no effect in kube-apiserver.
+    # --service-account-key-file: set to one or more files containing one or
+    # more public keys used to verify tokens.
+    # --service-account-issuer: set to a URL identifying the API server that
+    # will be stable over the cluster lifetime.
+    # Since k8S v1.19 --basic-auth-file flag is no longer supported.
     command="${KURYR_KUBE_APISERVER_BINARY} \
                 --service-cluster-ip-range=${cluster_ip_range} \
                 --service-account-issuer=https://${SERVICE_HOST}:${KURYR_K8S_API_PORT} \
                 --service-account-signing-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
-                --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --service-account-key-file=${KURYR_KUBERNETES_DATA_DIR}/kuryr.key \
                 --insecure-bind-address=0.0.0.0 \
                 --insecure-port=0 \
                 --etcd-servers=http://${SERVICE_HOST}:${ETCD_PORT} \
                 --client-ca-file=${KURYR_KUBERNETES_DATA_DIR}/ca.crt \
-                --min-request-timeout=600 \
+                --min-request-timeout=300 \
                 --tls-cert-file=${KURYR_KUBERNETES_DATA_DIR}/server.cert \
                 --tls-private-key-file=${KURYR_KUBERNETES_DATA_DIR}/server.key \
                 --token-auth-file=${KURYR_KUBERNETES_DATA_DIR}/known_tokens.csv \
-                --feature-gates="RemoveSelfLink=false" \
                 --allow-privileged=true \
                 --v=$(get_k8s_log_level) \
                 --logtostderr=true"
@@ -670,7 +676,7 @@ function run_k8s_controller_manager {
     setup_k8s_binaries $tmp_kube_controller_manager $binary_name $KURYR_KUBE_CONTROLLER_MANAGER_BINARY
 
     # Runs Hyperkube's Kubernetes controller manager
-    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL"
+    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL" "$KURYR_ADMIN_TOKEN"
 
     command="${KURYR_KUBE_CONTROLLER_MANAGER_BINARY} \
                 --master=$KURYR_K8S_API_URL \
@@ -692,7 +698,7 @@ function run_k8s_scheduler {
     setup_k8s_binaries $tmp_kube_scheduler $binary_name $KURYR_KUBE_SCHEDULER_BINARY
 
     # Runs Kubernetes scheduler
-    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL"
+    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL" "$KURYR_ADMIN_TOKEN"
 
     command="${KURYR_KUBE_SCHEDULER_BINARY} \
                 --master=${KURYR_K8S_API_URL} \
@@ -745,28 +751,13 @@ function run_k8s_kubelet {
     # adding Python and all our CNI/binding dependencies.
     local command
     local minor_version
-    local path_
-
-    path_="/home/vagrant"
-
-    cat >> "${path_}/config.yml" << EOF
-apiVersion: kubelet.config.k8s.io/v1beta1
-kind: KubeletConfiguration
-address:
-    "0.0.0.0"
-enableServer:
-    true
-cgroupDriver:
-    "cgroupfs"
-failSwapOn:
-    false
-EOF
 
     sudo mkdir -p "${KURYR_KUBERNETES_DATA_DIR}/"{kubelet,kubelet.cert}
     command="$KURYR_KUBELET_BINARY \
         --kubeconfig=${HOME}/.kube/config \
         --v=2 \
-        --config=${path_}/config.yaml \
+        --address=0.0.0.0 \
+        --enable-server \
         --network-plugin=cni \
         --cni-bin-dir=$CNI_BIN_DIR \
         --cni-conf-dir=$CNI_CONF_DIR \
@@ -810,7 +801,9 @@ EOF
         command+=" --cluster-dns=${KURYR_COREDNS_CLUSTER_IP} --cluster-domain=cluster.local"
     fi
 
-    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL"
+    wait_for "Kubernetes API Server" "$KURYR_K8S_API_URL" "$KUBELET_TOKEN" \
+        "${KURYR_KUBERNETES_DATA_DIR}/kuryr-ca.crt" \
+        1200
     run_process kubelet "$command" root root
 }
 
